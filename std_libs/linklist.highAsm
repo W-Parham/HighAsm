@@ -1,0 +1,23 @@
+class linkNode[T] {
+    template {
+        head:Ref[linkNode],
+        next:Ref[linkNode],
+        data:Ref[type[T]]
+    }
+    def __new__(){
+        ret var:alloc[linkNode,T]   
+    }
+    def __index(){
+        return self.data
+    }
+    def __next__(key){
+        self.data:IsNot(class,list,dict){
+            return NULL
+        }
+        self.data:HasIter(){
+            return self.data[key]
+        } else {
+            return NULL
+        }
+    }
+}

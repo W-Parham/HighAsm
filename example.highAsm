@@ -1,0 +1,14 @@
+
+
+
+function subTwo(var:ptr[int8]){
+};
+
+function subOne(var:ptr[int8]){
+    subTwo(var);
+};
+
+function main(){
+    local var:alloc[int64] = 10;
+    subOne(var);
+};
