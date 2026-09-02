@@ -93,12 +93,3 @@ class StreamingLexer:
         except StopIteration:
             return ""
 
-    def handle_import(self, imported_source_code: str):
-        """Pushes a new stream frame directly onto the execution stack."""
-        self.stack.push_frame(
-            block_payload=imported_source_code,
-            engine=iter(imported_source_code)
-        )
-    def __iter__(self) -> str:
-        
-
