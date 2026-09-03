@@ -1,41 +1,37 @@
-# Parser Refactor: Moving from Regex to Proper Parser Architecture
+# HighAsm
 
-**Status:** Blocker for language progress  
-**Skill Level Needed:** Intermediate+ (parser design, Python)
+A method-centric systems programming language with zero-keyword syntax.
 
-## Background
-HighAsm is a method-centric programming language with zero-keyword syntax. 
-For 8 years, I've been the only contributor, and I've hit my skill limit on the parser.
+## What Makes HighAsm Different
 
-## The Problem
-1. Started with a regex-based tokenizer (MAINPATTERN in old code)
-   - Worked initially but couldn't scale with language evolution
-   - Became unmaintainable as edge cases accumulated
-   - Eventually broke on complex nested syntax
+Instead of traditional keywords (`if`, `for`, `var`), HighAsm uses pure method dispatch:
 
-2. Semantic analysis in `analyzer.py` was supposed to handle classification
-   - But garbage in = garbage out. Bad tokenization cascaded into analysis failures
+```highasm
+var:condition { /* executes if true */ }
+counter:repeat { /* loop */ }
+list:for(key, value) { /* iterate */ }
+```
 
-## What We Need
-A proper **statement-level parser** that can handle:
-- Method dispatch chains: `obj:method():another()`
-- Nested generics: `Type[List[int64]]`
-- Complex scopes: `var:logic[T] { nested:call { } }`
-- Edge cases we haven't discovered yet (because current parser chokes on them)
+This eliminates syntax bloat and makes every operation a method call on objects or primitives.
 
-## Approach
-Instead of trying to fix the regex, we should:
-1. Build a **simple lexer** that just tokenizes (no semantic decisions)
-2. Write a **recursive descent parser** for statement structure
-3. Keep `analyzer.py` doing semantic classification
+## Status
 
-## Why This Matters
-Once parsing works reliably, we can:
-- Actually test language features
-- Get contributors excited about building the standard library
-- Prove the language works, not just that it's theoretically sound
+**Early stage / 8-year refactor in progress**
 
-## Looking For
-- Someone comfortable with parser design (Python or willing to write it)
-- Experience with custom syntax (Lisp, Forth, or similar esoteric languages a plus)
-- Commitment to document decisions (this needs to be maintainable by others)
+We're rebuilding the parser on the `prototype` branch. If you're interested in language design or parser architecture, [check out the blocker issue](https://github.com/W-Parham/HighAsm/issues).
+
+## Project Structure
+
+- `docs/HighAsm_Language_Documentation.md` — Full language specification
+- `prototype` branch — Parser refactor in progress
+- `main` branch — Documentation and project foundation
+
+## Help Wanted
+
+We need contributors experienced with **parser design** to help build a proper lexer + recursive descent parser for HighAsm's method-centric syntax.
+
+Interested? Open an issue or check the parser refactor discussion.
+
+## License
+
+Apache 2.0
