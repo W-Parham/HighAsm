@@ -33,9 +33,4 @@ We need contributors experienced with **parser design** to help build a proper l
 Interested? Open an issue or check the parser refactor discussion.
 
 ## License
-
-<<<<<<< HEAD
 Apache 2.0
-=======
-Apache 2.0
->>>>>>> main
