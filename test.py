@@ -1,92 +1,51 @@
 # test.py
-from modules.front import CSTLexer, LexerStream, LossyCSNode, MathExpressionNode
+import tkinter as tk
+from tkinter import ttk
+from modules.front import LossyCSTParser, LossyCSNode, MathExpressionNode
 
-def run_test(scenario_name: str, source_code: str):
-    print("=" * 70)
-    print(f"SCENARIO: {scenario_name}")
-    print(f"INPUT:    '{source_code}'")
-    print("=" * 70)
-    
-    # Initialize the pipeline
-    parser = CSTLexer(source_code)
-    
-    try:
-        # Run the non-recursive trampoline engine
-        cst_root = parser()
+def print_cst_tree(nodes: list[LossyCSNode], indent: str = ""):
+    for i, node in enumerate(nodes):
+        is_last = (i == len(nodes) - 1)
+        marker = "└── " if is_last else "├── "
+        child_indent = indent + ("    " if is_last else "│   ")
         
-        # Display the structural tree
-        if cst_root:
-            print_node(cst_root)
-        else:
-            print("Output: None (Empty file or skipped expression)")
-            
-    except Exception as e:
-        print(f"❌ COMPILER CRASH: {e}")
-    print("\n")
+        details = []
+        if node.key: details.append(f"key='{node.key}'")
+        if node.subject: details.append(f"subject='{node.subject}'")
+        if node.operator: details.append(f"operator='{node.operator}'")
+        
+        if node.assignment:
+            if isinstance(node.assignment, MathExpressionNode):
+                details.append("assignment=MathExpressionNode(...)")
+            else:
+                details.append(f"assignment='{node.assignment}'")
+        
+        attr_string = " | ".join(details)
+        print(f"{indent}{marker}LossyCSNode [Line {node.line}, Col {node.column:02d}] ──> {attr_string}")
+        
+        if isinstance(node.assignment, MathExpressionNode):
+            expr: MathExpressionNode = node.assignment
+            math_marker = "    └── " if not node.body else "    ├── "
+            print(f"{child_indent}{math_marker}└── MathExpressionNode [Line {expr.line}, Col {expr.column:02d}]: left='{expr.left}' {expr.operator} right='{expr.right}'")
 
-def print_node(node, indent: int = 0):
-    """Helper script to pretty-print your custom slotted nodes gracefully."""
-    spacing = "  " * indent
-    if isinstance(node, LossyCSNode):
-        print(f"{spacing}LossyCSNode (Line: {node.line}, Col: {node.column})")
-        if node.key:        print(f"{spacing}  ├─ key:        '{node.key}'")
-        if node.subject:    
-            print(f"{spacing}  ├─ subject:")
-            print_node(node.subject, indent + 3)
-        if node.operator:   print(f"{spacing}  ├─ operator:   '{node.operator}'")
-        if node.assignment: 
-            print(f"{spacing}  ├─ assignment:")
-            print_node(node.assignment, indent + 3)
-        if node.operator_index:
-            print(f"{spacing}  ├─ operator_index:")
-            for arg in node.operator_index:
-                print_node(arg, indent + 3)
-    elif isinstance(node, MathExpressionNode):
-        print(f"{spacing}MathExpressionNode [Op: '{node.operator}']")
-        print(f"{spacing}  ├─ left:")
-        print_node(node.left, indent + 2)
-        print(f"{spacing}  └─ right:")
-        print_node(node.right, indent + 2)
-    else:
-        # Terminal types (str, int)
-        print(f"{spacing}'{node}' ({type(node).__name__})")
+        if node.body:
+            print_cst_tree(node.body, child_indent)
 
-# =====================================================================
-# THE HIGHASM EXHAUSTIVE TEST SUITE
-# =====================================================================
 if __name__ == "__main__":
-    # Test 1: Traditional memory-scoped variable assignment with math bounds
-    run_test(
-        scenario_name="Modified Allocation with Math Precedence (PEMDAS)",
-        source_code="local count = 5 + 4 * 2"
-    )
+    highasm_code_snippet = """
+    local author:int64 = "allic,matt"
+    count:method
+    local math_result:int64 = 5 + 5
+    matrix grid:Space = "unsupported_keyword_test"
+    
+    try {
+        main: {
+            local ref:Cursor = 42
+        }
+    }
+    """
 
-    # Test 2: Unmodified/bare assignment layout verification
-    run_test(
-        scenario_name="Bare Assignment without Memory Key",
-        source_code="total = 100 / 10"
-    )
+    parser = LossyCSTParser(highasm_code_snippet)
+    cst = parser.parse()
+    print_cst_tree(cst)
 
-    # Test 3: HighAsm signature method call format
-    run_test(
-        scenario_name="Bare Method Invocation",
-        source_code="count:increment"
-    )
-
-    # Test 4: Pure memory routing macro method calls
-    run_test(
-        scenario_name="Modified Method Invocation",
-        source_code="loan buffer:release"
-    )
-
-    # Test 5: Complex parenthetical mathematical overrides
-    run_test(
-        scenario_name="Parentheses Math Precedence Override",
-        source_code="result = (5 + 4) * 2"
-    )
-
-    # Test 6: In-line array indexing/dynamic conditional switches
-    run_test(
-        scenario_name="Method Call with Inline Bracket Arguments",
-        source_code="local target:method[cmp, replace]"
-    )

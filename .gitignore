@@ -6,3 +6,6 @@
 /regex.rules
 /task.bash
 /test.py
+/oldDocs/*
+/oldDocs
+.gitignore

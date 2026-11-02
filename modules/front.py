@@ -1,250 +1,221 @@
-from collections import namedtuple,deque
+# highasm_engine.py
 from dataclasses import dataclass, field
-from typing import Any, Iterator, List, Optional, Union,Tuple,Generator
+from time import sleep
+from typing import Any, Iterator, List, Optional, Union, Tuple, Generator,Self
 
 class CST_SyntaxError(Exception):
     """Custom exception for HighAsm syntax violations."""
     pass
+
 # =====================================================================
-# THE BASE CLASS
+# THE BASE DATA STRUCTURES (Slotted Specifications)
 # =====================================================================
 @dataclass(slots=True)
 class Token:
-    """Slotted base class ensuring line and column track properly across all nodes."""
-    line: int                     # Line number for tracking error diagnostics
-    column: int                   # Starting column location for compiler warning!
+    Parent:Optional[Self]
+    line: int
+    text:Optional[str] = field(default=None)
 
-# =====================================================================
-# RECURSIVE MATHEMATICAL NODES
-# =====================================================================
-@dataclass(slots=True, kw_only=True)
+@dataclass(kw_only=True)
 class MathExpressionNode(Token):
-    """A recursive mathematical structure that supports infinite equations."""
     left: Union[str, int, 'MathExpressionNode']                  
-    operator: str                    
-    right: Optional[Union[str, int, 'MathExpressionNode']] = None 
+    operator: str = field(default="")                   
+    right: Optional[Union[str, int, 'MathExpressionNode']] = field(default=None)
 
-# =====================================================================
-# THE LOSSY CONCRETE SYNTAX TREE NODE
-# =====================================================================
-@dataclass(slots=True, kw_only=True)
+@dataclass(kw_only=True)
 class LossyCSNode(Token):
-    """
-    A comprehensive lossy CST node designed to hold every syntactic 
-    token, delimiter, and modifier without dropping data.
-    """
-    # --- Structural Components ---
-    key: Optional[str] = None                     # e.g., 'local', 'loan', 'pass', 'data'                  
-    subject: Optional[Union[str, 'LossyCSNode', MathExpressionNode]] = None  
-    sub_index: Optional['LossyCSNode'] = None      # e.g., '[type]', 'Type[T]'      
-    operator: Optional[str] = None               
-    assignment: Optional[Union['LossyCSNode', MathExpressionNode]] = None     
-    
-    # Dynamic field factories cleanly isolated at the bottom
-    operator_index: List[Union['LossyCSNode', str, int, MathExpressionNode]] = field(default_factory=list) 
-    body: Optional[List['LossyCSNode']] = field(default_factory=list)
+    key: Optional[str] = field(default=None)                
+    subject: Optional[Union[str, 'LossyCSNode', MathExpressionNode]] = field(default=None)  
+    subject_brackets: Optional[list[Union[str, int, MathExpressionNode, 'LossyCSNode']]] = field(default=None)
+    subject_Index:Optional[list[str]] = field(default=None)
+    operator: Optional[str] = field(default=None)                       
+    operator_args: Optional[list[Union[str, int, MathExpressionNode, 'LossyCSNode']]] = field(default=None)
+    operator_Index: Optional[list[str]] = field(default=None)
+    operator_brackets: Optional[list[Union[str, int, MathExpressionNode, 'LossyCSNode']]] = field(default=None)
+    assignment: Optional[Union[str, 'LossyCSNode', MathExpressionNode]] = field(default=None)
+    body: Optional[List['LossyCSNode']] = field(default=None)
 
+@dataclass(kw_only=True)
+class LiteralToken(Token):
+    """Subclass for values that carry evaluated data payload contexts."""
+    value:Optional[Any] = field(default=None)
 
-Frame = namedtuple("Frame", ["generator", "context"])
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(text={repr(self.text)}, value={repr(self.value)}, L:{self.line})"
 
-class LexerStream:
-    def __init__(self, source: str):
-        self.source = source
-        # Turn your original execution logic into a stateful iterator stream
-        self.iterator = self.__lex_generator()
-        self.buffer: deque[Tuple[str, int]] = deque()
+# =====================================================================
+# THE COMPILER PARSER CORE
+# =====================================================================
+class LossyCSTParser:
+    def __init__(self, source_code: str):
+        # Single source of truth for delimiters across the system
+        self.delimiters = {" ", ",", "\n", "(", "{", "[", ")", "}", "]", ":", "=", "+", "-", "*", "/", "&", ";"}
+        self.math_operators = {'+', '-', '*', '/'}
+        
+        self.token_stream: Iterator[Tuple[str, int, int]] = self.__lex_generator(source_code)
+        
+        # Upgraded to a sliding lookahead window list to allow safe lookahead peeking
+        self.lookahead_buffer: List[Tuple[str, int, int]] = []
+        for _ in range(5):
+            self._prime_buffer()
 
-    def __lex_generator(self) -> Iterator[Tuple[str, int]]:
-        """ Your original token extraction logic, untouched """
-        currentWord = ""
-        for index, char in enumerate(self.source):
-            if char in [" ",",", "\n", "(", "{", "[", ")", "}", "]", ":"]:
-                # === ADD THE CHECK HERE ===
-                if char == ":":
-                    if index > 0 and self.source[index - 1] == " ":
-                        raise CST_SyntaxError(f"Syntax Error at index {index}: Spaces are not allowed before a colon ':'.")
-                if currentWord:
-                    yield currentWord, index - len(currentWord)
-                    currentWord = ""
-                if char != " ": 
-                    yield char, index
-                continue
-            currentWord = f"{currentWord}{char}"
-        if currentWord:
-            yield currentWord, len(self.source) - len(currentWord)
-
-    def __fill_buffer(self, count: int):
-        """ Dynamically pulls tokens from the yield engine only when needed """
-        while len(self.buffer) <= count:
-            try:
-                next_token = next(self.iterator)
-                self.buffer.append(next_token)
-            except StopIteration:
-                break # Stream is fully exhausted
-    def peek(self, n: int) -> Tuple[str, int]:
-        # If n = 3, this calls __fill_buffer(4)
-        # The generator yields until the deque has exactly 4 items sitting on the shelf
-        self.__fill_buffer(n)
-        # Return the item at index [3] without popping it from the deque
-        return self.buffer[n]
-
-    def __next__(self):
-        if len(self.buffer) == 0:
-            return next(self.iterator)
-        return self.buffer.popleft()
-
-class CSTLexer:
-    def __init__(self,source:str):
-        self.stream = LexerStream(source)
-        self.precedence = {
-            '+': 1, '-': 1,
-            '*': 2, '/': 2,
-            '^': 3
-        }
-
-    def _get_token_meta(self, offset: int = 0) -> tuple[int, int]:
-        """
-        Safely extracts line and column metadata from the lookahead stream window.
-        Returns a flat tuple of (line, column_index).
-        """
-        if self.stream:
-            tok_data = self.stream.peek(offset)
-            if tok_data:
-                # tok_data is a Tuple[str, int] (e.g., ("local", 6))
-                # Unpack the token string run and its absolute character index
-                _, absolute_char_index = tok_data
-                
-                # Replace this with your line-counting log if you want, 
-                # but passing the raw integer position works perfectly for now!
-                return 1, absolute_char_index
-                
-        return 1, 0
-
-
-    # CORRECTED HINT: Yields a Generator, receives Any back from send(), returns a terminal math node
-    def parse_primary_gen(self) -> Generator[Generator[Any, Any, Any], Any, Union[str, int, MathExpressionNode]]:
-        if not self.stream:
-            raise RuntimeError("Parser execution attempted without an attached stream context.")
-            
-        token, _ = self.stream.peek(0)
-        line, col = self._get_token_meta(0)
-
-        if token == "(":
-            self.stream.__next__()  # Consume '('
-            expr = yield self.parse_math_expr_gen(0)
-            next_tok, _ = self.stream.peek(0)
-            if next_tok == ")":
-                self.stream.__next__()  # Consume ')'
-            return expr
-
-        tok, _ = self.stream.__next__()
-        if tok.isdigit():
-            return int(tok)
-        return tok
-
-    # CORRECTED HINT: Yields a Generator, receives Any, returns MathExpressionNode or terminal primitives
-    def parse_math_expr_gen(self, min_prec: int = 0) -> Generator[Generator[Any, Any, Any], Any, Union[str, int, MathExpressionNode]]:
-        line, col = self._get_token_meta(0)
-        left = yield self.parse_primary_gen()
-
-        while True:
-            if not self.stream: break
-            try:
-                op, _ = self.stream.peek(0)
-            except (StopIteration, IndexError):
-                break
-
-            if op not in self.precedence or self.precedence[op] < min_prec:
-                break
-
-            self.stream.__next__()  
-            right = yield self.parse_math_expr_gen(self.precedence[op] + 1)
-            left = MathExpressionNode(line=line, column=col, left=left, operator=op, right=right)
-
-        return left
-
-    # CORRECTED HINT: Yields a Generator, receives Any, returns your clean LossyCSNode
-    def parse_statement_gen(self) -> Generator[Generator[Any, Any, Any], Any, Optional[LossyCSNode]]:
-        if not self.stream:
-            return None
-            
+    def _prime_buffer(self):
+        """Pulls a single token from the generator into our lookahead pool."""
         try:
-            t0, _ = self.stream.peek(0)
-        except (StopIteration, IndexError):
-            return None 
+            tok = next(self.token_stream)
+            self.lookahead_buffer.append(tok)
+        except StopIteration:
+            pass
 
-        line, col = self._get_token_meta(0)
+    def _consume(self,n:Optional[int] = None) -> Optional[Tuple[str, int, int]]:
+        """Consumes the front token and shifts the sliding lookahead window forward."""
+        if not self.lookahead_buffer:
+            return None
+        for _ in range(n or 1):
+            consumed = self.lookahead_buffer.pop(0)
+            self._prime_buffer()
+        return consumed
 
-        try: t1, _ = self.stream.peek(1)
-        except (StopIteration, IndexError): t1 = None
-
-        try: t2, _ = self.stream.peek(2)
-        except (StopIteration, IndexError): t2 = None
-
-        key_val = None
-        subject_val = None
-
-        if t1 and t2 and t2 in [":", "="]:
-            key_val, _ = self.stream.__next__()
-            subject_val, _ = self.stream.__next__()
-        elif t1 and t1 in [":", "="]:
-            subject_val, _ = self.stream.__next__()
-        else:
-            expr_tree = yield self.parse_math_expr_gen(0)
-            return LossyCSNode(line=line, column=col, subject=expr_tree)
-
-        pivot_op, _ = self.stream.__next__() 
-
-        if pivot_op == "=":
-            assignment_tree = yield self.parse_math_expr_gen(0)
-            return LossyCSNode(
-                line=line, column=col, key=key_val, subject=subject_val,
-                operator="=", assignment=assignment_tree
-            )
-
-        elif pivot_op == ":":
-            method_name, _ = self.stream.__next__()
-            op_idx = []
-            
-            try: next_tok, _ = self.stream.peek(0)
-            except (StopIteration, IndexError): next_tok = None
-            
-            if next_tok == "[":
-                self.stream.__next__()  
-                while True:
-                    tok, _ = self.stream.peek(0)
-                    if tok == "]":
-                        self.stream.__next__()  
-                        break
-                    val = yield self.parse_primary_gen()
-                    op_idx.append(LossyCSNode(line=line, column=col, subject=val))
-                    if self.stream.peek(0) == ",":
-                        self.stream.__next__()
-
-            return LossyCSNode(
-                line=line, column=col, key=key_val, subject=subject_val, operator=":",
-                assignment=LossyCSNode(line=line, column=col, subject=method_name),
-                operator_index=op_idx
-            )
-
+    def _peek(self, offset: int = 0) -> Optional[Tuple[str, int, int]]:
+        """Safely inspects a future token without consuming it or shifting position."""
+        if offset < len(self.lookahead_buffer):
+            return self.lookahead_buffer[offset]
         return None
 
-    # =====================================================================
-    # THE CALLABLE ENTRY POINT
-    # =====================================================================
-    def __call__(self) -> Optional[LossyCSNode]: 
-        stack = [self.parse_statement_gen()]
-        value = None
-        while stack:
-            top = stack[-1]
-            try:
-                if isinstance(value, Exception):
-                    raise value
-                sub = top.send(value)
-                stack.append(sub)
-                value = None 
-            except StopIteration as e:
-                stack.pop()
-                value = e.value
+    def __lex_generator(self, source: str) -> Iterator[Tuple[str, int, int]]:
+        """Continuous spatial coordinate accumulator using centralization shields."""
+        currentWord = ""
+        word_start_col = 1
+        line_idx = 1
+        col_idx = 1
+        
+        in_string = False
+        string_quote = ""  
+
+        for char in source:
+            if in_string:
+                currentWord = f"{currentWord}{char}"
+                col_idx += 1
+                if char == string_quote:
+                    yield currentWord, line_idx, word_start_col
+                    currentWord = ""
+                    in_string = False
+                continue
+
+            if char in ('"', "'"):
+                if currentWord:
+                    yield currentWord, line_idx, word_start_col
+                in_string = True
+                string_quote = char
+                word_start_col = col_idx
+                currentWord = f"{char}"
+                col_idx += 1
+                continue
+
+            if char == "\n":
+                if currentWord:
+                    yield currentWord, line_idx, word_start_col
+                    currentWord = ""
+                yield "\n", line_idx, col_idx
+                line_idx += 1
+                col_idx = 1
+                continue
                 
-        return value
+            if char in self.delimiters:
+                if currentWord:
+                    yield currentWord, line_idx, word_start_col
+                    currentWord = ""
+                if char != " ":
+                    yield char, line_idx, col_idx
+                col_idx += 1
+                continue
+                
+            if not currentWord:
+                word_start_col = col_idx
+            currentWord = f"{currentWord}{char}"
+            col_idx += 1
+            
+        if currentWord:
+            yield currentWord, line_idx, word_start_col
+
+    def __call__(self) -> LossyCSNode:
+
+        root_node: LossyCSNode = LossyCSNode(Parent=None, line=-1, subject="Virtual_Root", body=[]) 
+        
+        # DIRECTION 1: Tracks the structural parent container (Changes ONLY on { and })
+        active_parent_node: LossyCSNode = root_node
+        # Tracks the active target list we are currently appending lines into
+        current_body: list[LossyCSNode] = root_node.body  # type: ignore
+        # DIRECTION 2: Tracks the immediate last line node created (Changes on EVERY \n)
+        current_node: LossyCSNode = root_node
+        while True:
+            # 1. Safely check the current token without moving yet
+            current_peek = self._peek(0)
+            if current_peek is None:
+                break  # Safe EOF exit
+            
+            text, line, col = current_peek
+            # --- Structural Blocks ---
+            if text == "\n":
+                node = LossyCSNode(Parent=active_parent_node, line=line)
+                current_body.append(node)
+                current_node = node
+                self._consume() # Move stream forward past \n
+                continue        # Start loop over at the top
+
+            if text == "{":
+                current_node.body = []
+                active_parent_node = current_node
+                current_body = current_node.body
+                self._consume() # Move stream forward past {
+                continue
+            if text == "}":
+                if active_parent_node.Parent is not None:
+                    active_parent_node = active_parent_node.Parent
+                    current_body = active_parent_node.body  # type: ignore
+                else:
+                    active_parent_node = root_node
+                    current_body = root_node.body  # type: ignore
+                self._consume()
+                continue
+
+            # --- Complex Grammar (Safely handling lookaheads) ---
+            if (current_node.key and current_node.subject) is None:
+                next_item = self._peek(1)
+                # FIX: Check "if next_item" exists FIRST before using [0]
+                if next_item and next_item[0] != ":":
+                    # Use the returned tuple directly from consume!
+                    consumed_key = self._consume()
+                    consumed_subject = self._consume()
+                    if consumed_key and consumed_subject:
+                        current_node.key = consumed_key[0]      # Grab the string text
+                        current_node.subject = consumed_subject[0]  # Grab the string text
+                    continue
+            if current_node.subject is None:
+                next_item = self._peek(1)
+                # FIX: Check "if next_item" exists FIRST before using [0]
+                if next_item and next_item[0] == ":":
+                    consumed_subject = self._consume()
+                    if consumed_subject:
+                        current_node.subject = consumed_subject[0]
+                    self._consume() # Consume the colon ":" token too
+                    continue
+            if (current_node.subject is not None and current_node.operator is None) and text not in self.delimiters:
+                current_node.operator = self._consume() # type: ignore
+            if text == "[":
+                results: Optional[list[Union[str, int, MathExpressionNode, 'LossyCSNode']]] = []
+                if current_node.operator is None and current_node.subject is not None: 
+                    current_node.subject = results # type: ignore
+                elif current_node.operator is not None:
+                    current_node.operator = results # type: ignore
+                else:
+                    raise CST_SyntaxError(f"unexpected bracket at {line},{col}")
+                #now it's time to split on the , and deal with them 
+                
+                continue
+            if text == "]":
+                pass
+
+        return root_node
+
+                
