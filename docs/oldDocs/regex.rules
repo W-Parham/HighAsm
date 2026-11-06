@@ -1,0 +1,129 @@
+============================================================
+ Python REGEX Module — Pattern Syntax (Third‑Party Library)
+============================================================
+
+GENERAL METACHARACTERS
+----------------------
+.        Any character except newline (or any char with DOTALL)
+^        Start of string or line
+$        End of string or line
+|        Alternation
+(...)    Capturing group
+(?:...)  Non‑capturing group
+(?P<name>...)   Named capturing group
+(?P=name)       Backreference by name
+\1, \2, ...     Backreference by number
+
+ESCAPES
+-------
+\d       Digit
+\D       Non-digit
+\w       Word character
+\W       Non-word character
+\s       Whitespace
+\S       Non-whitespace
+\A       Start of string only
+\Z       End of string only
+\G       End of previous match
+\Q...\E  Literal text (quote mode)
+
+QUANTIFIERS
+-----------
+*        0 or more
++        1 or more
+?        0 or 1
+{m}      Exactly m
+{m,n}    Between m and n
+{m,}     m or more
+
+POSSESSIVE QUANTIFIERS (regex‑only)
+-----------------------------------
+*+       Possessive star
+++       Possessive plus
+?+       Possessive question
+{m,n}+   Possessive range
+
+ATOMIC GROUPS (regex‑only)
+--------------------------
+(?>...)  Atomic (no backtracking inside)
+
+LOOKAROUNDS
+-----------
+(?=...)      Positive lookahead
+(?!...)      Negative lookahead
+(?<=...)     Positive lookbehind (variable‑length allowed)
+(?<!...)     Negative lookbehind (variable‑length allowed)
+
+CONDITIONALS
+------------
+(?(id/name)yes|no)
+(?(id/name)yes)
+
+COMMENTS
+--------
+(?#...)      Inline comment
+(?x)         VERBOSE mode (ignore whitespace)
+
+FLAGS (INLINE)
+--------------
+(?i)         IGNORECASE
+(?s)         DOTALL
+(?m)         MULTILINE
+(?x)         VERBOSE
+(?u)         UNICODE
+(?V1)        VERSION1 behavior (regex‑only)
+(?f)         FULLCASE (regex‑only)
+
+
+============================================================
+ Python REGEX Module — Advanced Structural Syntax
+============================================================
+
+SUBROUTINES & RECURSION (The "Structural" Core)
+----------------------------------------------
+(?R)           Recurse the entire pattern
+(?n)           Recurse the pattern of numbered group 'n'
+(?-n)          Relative recursion (n-th previous group)
+(?&name)       Subroutine call to a named group/definition
+(?(DEFINE)...) Define a block of reusable sub-patterns
+
+CHARACTER SET LOGIC (VERSION 1 - (?V1))
+---------------------------------------
+[[a-z]--[aei]] Set Subtraction (consonants: a-z minus vowels)
+[[a-z]&&[p-z]] Set Intersection (only chars in both sets)
+[[a-z]||[0-9]] Set Union (combination of sets)
+[^...]         Negated Character Set (matches any char NOT listed)
+[...]          Character set
+
+FUZZY MATCHING (regex-only)
+---------------------------
+(?e)...        Enables fuzzy matching
+(...){e<2}     Match with less than 2 errors (insert/delete/sub)
+(...){s<2}     Match with less than 2 substitutions
+(...){i<2}     Match with less than 2 insertions
+(...){d<2}     Match with less than 2 deletions
+
+ADVANCED BOUNDARIES
+-------------------
+\b             Word boundary (start/end of word)
+\B             Non-word boundary
+\K             Reset start of match (discards everything before \K)
+\m             Start of word
+\M             End of word
+\h             Horizontal whitespace
+\H             Non-horizontal whitespace
+\v             Vertical whitespace
+\V             Non-vertical whitespace
+
+GROUPING MODIFIERS
+------------------
+(?>...)        Atomic Grouping (no backtracking; "locks" the match)
+(?|...|...)    Branch Reset (groups in different branches share IDs)
+(?<name>...)   Alternative syntax for (?P<name>...)
+
+REPETITION & QUANTIFIERS
+------------------------
+*+             Possessive zero-or-more (does not give back)
+++             Possessive one-or-more
+?+             Possessive zero-or-one
+{m,n}+         Possessive range

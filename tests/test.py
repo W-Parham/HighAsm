@@ -1,7 +1,7 @@
 # test.py
 import tkinter as tk
 from tkinter import ttk
-from modules.front import LossyCSTParser, LossyCSNode, MathExpressionNode
+from src.modules.front import LossyCSTParser, LossyCSNode, MathExpressionNode
 
 def print_cst_tree(nodes: list[LossyCSNode], indent: str = ""):
     for i, node in enumerate(nodes):
